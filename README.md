@@ -1,5 +1,5 @@
 # alfred quicklinks workflow
-Workflow to quickly show links from Goodlinks. Oh yeah. it also supports simplified fuzzy finder.
+Workflow to quickly show links from Goodlinks. Oh yeah. it also supports simply fuzzy search.
 
 ## Rationale
 My work requires me to save a lot of link to internal company resources. I need to access them quite often - few times per day. Previously I kept such links in either Obsidian or save as bookmark in Safari. The thing is, my work is project oriented. In other words, I work on different projects and switch between them few times per day. After some time my safari bookmarks has becomed a mess. Keeping links in Obsidian was a really good option, but this require me to switch to another document while I'm working on other one. So I decided to keep all project related links in GoodLinks and develop this workflow.
