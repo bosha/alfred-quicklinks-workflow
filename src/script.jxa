@@ -1,0 +1,633 @@
+ObjC.import("Foundation")
+
+let log = null
+
+const DEFAULT_TAG_VAR_NAME = "default_tag"
+const DEFAUlT_TTL_VAR_NAME = "cache_ttl"
+const FZF_SIMILARITY_WEIGHT = 0.1
+const LOG_LEVEL_VAR_NAME = "log_level"
+
+// Simple fuzzy finder implementation taken from here - 
+// https://stackoverflow.com/questions/23305000/javascript-fuzzy-search-that-makes-sense
+function stringSimilarity(str1, str2, gramSize=2) {
+  function getNGrams(s, len) {
+    s = ' '.repeat(len - 1) + s.toLowerCase() + ' '.repeat(len - 1);
+    let v = new Array(s.length - len + 1);
+    for (let i = 0; i < v.length; i++) {
+      v[i] = s.slice(i, i + len);
+    }
+    return v;
+  }
+
+  if (!str1?.length || !str2?.length) { return 0.0; }
+
+  //Order the strings by length so the order they're passed in doesn't matter 
+  //and so the smaller string's ngrams are always the ones in the set
+  let s1 = str1.length < str2.length ? str1 : str2;
+  let s2 = str1.length < str2.length ? str2 : str1;
+
+  let pairs1 = getNGrams(s1, gramSize);
+  let pairs2 = getNGrams(s2, gramSize);
+  let set = new Set(pairs1);
+
+  let total = pairs2.length;
+  let hits = 0;
+  for (let item of pairs2) {
+    if (set.delete(item)) {
+      hits++;
+    }
+  }
+  return hits / total;
+}
+
+class SimpleLogger { 
+    logLevel = null
+
+    constructor(logLevel = "debug") {
+        this.logLevel = logLevel
+    }
+
+    error(msg) {
+        // errors are always goes to stdout
+        console.log(`[ERROR]: ${msg}`)
+    }
+
+    info(msg) {
+        if (this.logLevel === "info" || this.logLevel === "debug") {
+            console.log(`[INFO]: ${msg}`)
+        }
+    }
+
+    debug(msg) {
+        if (this.logLevel === "debug") {
+            console.log(`[DEBUG]: ${msg}`)
+        }
+    }
+}
+
+class GoodLinksApp { 
+    app = null
+    currentApp = null
+
+    constructor(currentApp) {
+        this.app = Application("GoodLinks")
+        // currentApp used solely to open special URI to trigger addition of new link
+        this.currentApp = currentApp
+    }
+
+    getAllTags() {
+        let tags = []
+        this.app.tags().forEach(tag => {
+            tags.push({
+                id: tag.id(),
+                name: tag.name()
+            })
+        })
+        return tags
+    }
+
+    getAllLinks() {
+        let links = []
+        this.app.links().forEach(link => {
+            links.push({
+                id: link.id(),
+                url: link.url(),
+                title: link.title(),
+                summary: link.summary(),
+                tags: link.tagNames(),
+                starred: link.starred(),
+                read: link.read()
+            })
+        })
+        return links
+    }
+
+    getAllLists() {
+        let lists = []
+        this.app.lists().forEach(list => {
+            lists.push({
+                id: list.id(),
+                name: list.name(),
+            })
+        })
+        return lists
+    }
+
+    getLinksWithTag(tagName) { 
+        let found = []
+        for (let link of this.getAllLinks()) {
+            if (link.tags.includes(tagName)) {
+                found.push(link)
+            }
+        }
+        return found
+    }
+
+    addNewLink(url, title, summary, tags, starred, read) {
+        if (url == undefined) { 
+            throw new Error("At least link url should be provided")
+        }
+
+        let params = {
+            url: url,
+            title: title || '',
+            summary: summary || '',
+            tags: tags || '',
+            starred: starred || false,
+            read: read || false,
+            quick: 1,
+        }
+
+        let paramsQuery = Object.keys(params).
+            map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k])).
+            join("&")
+
+        // I couldn't understand how to use make to add links, so decided to use
+        // app URI instead
+        let glUrl = `goodlinks://x-callback-url/save?${paramsQuery}`
+        // currentApp used here cause by some reason goodlinks does not returns links
+        // when includeStandardAdditions is set to true.
+        this.currentApp.openLocation(glUrl)
+        return true
+    }
+}
+
+class SimpleFilemanager {
+    currentApp = null
+
+    constructor(currentApp) {
+        this.currentApp = currentApp
+    }
+
+    read(filepath) {
+        let encoding = $.NSUTF8StringEncoding
+        let fm = $.NSFileManager.defaultManager
+        let  data = fm.contentsAtPath(filepath)
+        let str = $.NSString.alloc.initWithDataEncoding(data, encoding)
+        return ObjC.unwrap(str)
+    }
+
+    remove(filepath) {
+        let fileMgr = $.NSFileManager.defaultManager
+        return fileMgr.removeItemAtPathError(filepath, $())
+    }
+
+    exist(path) {
+        return $.NSFileManager.alloc.init.fileExistsAtPath(path)
+    }
+
+    save(filepath, content) {
+        let str = $.NSString.alloc.initWithUTF8String(content);
+        str.writeToFileAtomicallyEncodingError(filepath, true, $.NSUTF8StringEncoding, null);
+        return true
+    }
+}
+
+class FileCache {
+    currentApp = null
+    ttl = null
+    fm = null
+    cacheFilePath = "./cache.json"
+    lockFilePath = "./cache.lock"
+
+    constructor(currentApp, ttl=60) {
+        if (currentApp === undefined) {
+            this.currentApp = Application.currentApplication()
+            this.currentApp.includeStandardAdditions = true
+        }
+        this.currentApp = currentApp
+        this.ttl = ttl
+        this.fm = new SimpleFilemanager(currentApp)
+    }
+
+    get() {
+        if (!this.fm.exist(this.cacheFilePath)) {
+            // return this.updateCache()
+            return false
+        }
+
+        if (this.isLocked()) {
+            // if we updating cache then return cached data without making attempt
+            // to validate cache 
+            return JSON.parse(this.fm.read(this.cacheFilePath))
+        }
+
+        let cacheContent = JSON.parse(this.fm.read(this.cacheFilePath))
+        let cacheDt = new Date(cacheContent.cache_dt)
+        let now = new Date()
+        let cacheInvalidationDt = new Date(cacheDt.getTime() + this.ttl * 60000)
+        if (now.getTime() < cacheInvalidationDt.getTime()) {
+            return cacheContent.content
+        }
+
+        return false
+    }
+
+    set(content) {
+        if (this.isLocked()) {
+            // FIXME: throw exception?
+            return false
+        }
+
+        this.setLock()
+        this.fm.save(this.cacheFilePath, JSON.stringify({
+            cache_dt: new Date(),
+            content: content
+        }))
+        this.removeLock()
+
+        return true
+    }
+
+    reset() {
+        if (this.isLocked()) {
+            throw new Error("Cache is being updated (locked), cannot reset")
+        }
+        this.fm.remove(this.cacheFilePath)
+        return true
+    }
+
+    setLock() {
+        log.debug(`Creating lock file: ${this.lockFilePath}`)
+        this.fm.save(this.lockFilePath, "")
+    }
+
+    isLocked() {
+        return this.fm.exist(this.lockFilePath)
+    }
+
+    removeLock() {
+        log.debug(`Removing lock (removing file ${this.lockFilePath})`)
+        return this.fm.remove(this.lockFilePath)
+    }
+
+}
+
+// Dummy class for cases when it's configured to not use cache
+class NoCache {
+    get() {
+        return false
+    }
+
+    set(content) {
+        return true
+    }
+}
+
+class WorkflowError extends Error {
+    constructor(title, subtitle, ...params) {
+        super(...params)
+
+        this.name = "WorkflowError"
+        this.title = title
+        this.subtitle = subtitle
+    }
+}
+
+class WorkflowBase {
+    args = []
+    currentApp = null
+    goodlinksApp = null
+
+    constructor(currentApp = null) {
+        if (currentApp === null) {
+            this.currentApp = Application.currentApplication()
+            this.currentApp.includeStandardAdditions = true
+        }
+
+        this.goodlinksApp = new GoodLinksApp(this.currentApp)
+
+        let args = $.NSProcessInfo.processInfo.arguments
+        if (args.count < 5) {
+            log.error("Invalid number of arguments specified")
+            return null
+        }
+        this.args = ObjC.deepUnwrap(args).slice(4)
+    }
+
+    getEnvVar(name) {
+        let variable = ObjC.unwrap(
+            $.NSProcessInfo.processInfo.environment.objectForKey(name))
+        return variable === undefined ? null : variable
+    }
+
+    setEnvVar(name, value) {
+        let bundleid = this.getEnvVar("alfred_workflow_bundleid")
+        if (!bundleid) {
+            log.error("\"aflred_workflow_bundleid\" is not set")
+            throw new Error(
+                "could not read from \"alfred_workflow_bundleid\" env variable. Check that bundleid for workflow is set")
+        }
+
+        Application("com.runningwithcrayons.Alfred").setConfiguration(name, {
+            toValue: value,
+            inWorkflow: bundleid,
+            exportable: true,
+        })
+
+        return true
+    }
+
+    returnErr(title, subtitle) {
+        title = title || "Error executing workflow"
+        subtitle = subtitle || "Check workflow debug window for details"
+
+        return JSON.stringify({
+            "items": [
+                {
+                    "uid": "jl-error",
+                    "title": title,
+                    "subtitle": subtitle,
+                    "valid": false,
+                }
+            ]
+        })
+    }
+
+    returnResult(data) {
+        return JSON.stringify({
+            "items": data
+        })
+    }
+}
+
+class ListTagsCommand extends WorkflowBase {
+    run() {
+        let tagName = this.args.at(1)
+        let tags = this.goodlinksApp.getAllTags()
+
+        if (tagName === undefined || tagName === "") {
+            let results = []
+            tags.forEach(tag => {
+                results.push({
+                    "uid": `jl-tag-${tag.name}`,
+                    "title": tag.name,
+                    "subtitle": `Press enter to select tag "${tag.name}" as default`,
+                    "arg": tag.name,
+                    "autocomplete": tag.name,
+                    "valid": true,
+                })
+            })
+            return this.returnResult(results)
+        }
+
+        let results = []
+        tags.forEach(tag => {
+            if (tag.name.toLowerCase().startsWith(tagName.toLowerCase())) {
+                results.push({
+                    "uid": `jl-tag-${tag.name}`,
+                    "title": `Use [${tag.name}] as default`,
+                    "subtitle": `Press enter to use tag [${tag.name}] as default`,
+                    "arg": tagName,
+                    "autocomplete": tagName,
+                    "valid": true,
+                })
+            }
+        })
+
+        // in case if tag with such name doesn't exist, return item with suggestion to
+        // create a new tag
+        if (results.length < 1) {
+            return this.returnResult([{
+                    "uid": `jl-tag-${tagName}`,
+                    "title": `Press enter to use a new tag [${tagName}]`,
+                    "subtitle": `Note that you will not get results until add links with this tag to GoodNotes`,
+                    "arg": tagName,
+                    "autocomplete": tagName,
+                    "valid": true,
+                }]
+            )
+        }
+        return this.returnResult(results)
+    }
+}
+
+class SetTagCommand extends WorkflowBase {
+    run() {
+        if (this.args.count < 2) {
+            log.error("invalid number of arguments specified for [set-tag] command")
+            return this.returnErr()
+        }
+
+        let tagName = this.args.at(1)
+        this.setEnvVar(DEFAULT_TAG_VAR_NAME, tagName)
+        log.debug(`Tag [${tagName}] set to default one`)
+    }
+}
+
+class ListLinksCommand extends WorkflowBase {
+    formatLinksForAlfred(links) {
+        let results = []
+        links.forEach(link => {
+            results.push({
+                "uid": `jl-link-${link.id}`,
+                "title": link.title,
+                "subtitle": link.summary,
+                "arg": link.url,
+                "autocomplete": link.title,
+                "valid": true,
+                "mods": {
+                    "cmd": {
+                        "valid": true,
+                        "arg": JSON.stringify({
+                            "alfredworkflow": {
+                                "arg": link.url,
+                                "variables": {
+                                    "action": "open-in-goodlinks"
+                                }
+                            }
+                        }),
+                        "subtitle": "Open link in GoodLinks"
+                    }
+                }
+            })
+        })
+        return results
+    }
+
+    run() {
+        let links = []
+        try {
+            links = this.getLinks()
+        } catch (e) {
+            return this.returnErr(e.message)
+        }
+
+        if (links.length === 0) {
+            return this.returnErr(
+                "No links were added to quicklist",
+                `Add some links in Goodlinks with tag "${this.getEnvVar(DEFAULT_TAG_VAR_NAME)}"`
+            )
+        }
+
+        let query = this.args.at(1)
+        if (query !== undefined && query !== "") {
+            log.debug(`got argument for filtering=${query}`)
+
+            let linksWithWeight = []
+            links.forEach(link => {
+                let titleSimilarity = stringSimilarity(link.title, query)
+
+                let summarySimilarity = stringSimilarity(link.summary, query)
+
+                if (titleSimilarity > FZF_SIMILARITY_WEIGHT || summarySimilarity > FZF_SIMILARITY_WEIGHT) {
+                // if ((titleSimilarity + summarySimilarity) > FZF_SIMILARITY_WEIGHT) {
+                    log.debug(`query=${query}; link=${link.title}; titleSimilarity=${titleSimilarity}; summarySimilarity=${summarySimilarity}`)
+                    linksWithWeight.push({
+                        "weight": {
+                            "title": titleSimilarity,
+                            "summary": summarySimilarity
+                        },
+                        "link": link
+                    })
+                }
+
+                let sortedLinks = linksWithWeight.sort((a,b) => { 
+                    return (b.weight.title + b.weight.summary) - (a.weight.title + a.weight.summary)
+                })
+
+                links = []
+                sortedLinks.forEach((link) => {
+                    links.push(link.link)
+                })
+            })
+
+        }
+
+        return this.returnResult(this.formatLinksForAlfred(links))
+    }
+
+    getLinks() {
+        log.debug("Requested to load links..")
+
+        let defaultTag = this.getEnvVar(DEFAULT_TAG_VAR_NAME)
+        if (defaultTag === null) { 
+            return this.returnErr(
+                "Default tag is not set",
+                "You can set default tag with jl-settag"
+            )
+        }
+
+        let cache = null
+        let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
+        if (cacheTtl === null || cacheTtl === "0" || cacheTtl === "") {
+            log.debug("user opted to not use cache")
+            cache = new NoCache()
+        } else {
+            log.debug(`using FileCache with ttl=${cacheTtl}`)
+            cache = new FileCache(this.currentApp, cacheTtl)
+        }
+
+        let content = cache.get()
+        // if cache is up to date then we simply return cached data
+        if (content) {
+            log.debug(`have links in cache with tag = ${content.tag}`)
+            // returning cache content only in case tag in cache is the same tag
+            // got from alfred in runtime. Otherwise invalidating cache and building
+            // new one
+            if (content.tag === defaultTag) {
+                log.debug(`content.tag (${content.tag}) === defaultTag (${defaultTag}), returning from cache`)
+                // return this.returnResult(this.formatLinksForAlfred(content.links))
+                return content.links
+            } else {
+                log.debug(`tag in cache differs from current default tag (${content.tag} !== ${defaultTag}, cache is invalid`)
+            }
+        }
+
+        log.debug("loading fresh data from GoodLinks")
+        let links = this.goodlinksApp.getLinksWithTag(defaultTag)
+        log.debug(`Got ${links.length} with tag ${defaultTag}`)
+        let contentToCache = {
+            tag: defaultTag,
+            links: links,
+        }
+        if (!cache.set(contentToCache)) {
+            log.error(`Could not update cache! Another process is running?`)
+            throw new WorkflowError("Could not update cache", "Another process is running")
+        }
+
+        log.debug("cache successfully updated")
+
+        return links
+    }
+}
+
+class ResetCacheCommand extends WorkflowBase {
+    run() {
+        log.debug("running clean cache command")
+        let cache = null
+        let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
+        if (cacheTtl !== null && cacheTtl !== "0" && cacheTtl !== "") {
+            log.debug("Cache is in use, resetting it")
+            cache = new FileCache(this.currentApp, cacheTtl)
+            try {
+                cache.reset()
+            } catch(e) {
+                return this.returnErr("Could not reset cache", e.message)
+            }
+        }
+
+        this.returnResult([{
+            "uid": `jl-success`,
+            "title": `Cache has been reset`,
+            "subtitle": `Cache successfully been reset`,
+            "valid": true,
+        }])
+    }
+}
+
+class OpenInGoodLinksCommand extends WorkflowBase {
+    run() {
+        if (this.args.count < 2) {
+            log.error("invalid number of arguments specified for [open-in-goodlinks] command")
+            return this.returnErr()
+        }
+        let url = this.args.at(1)
+        let glUrl = `goodlinks://x-callback-url/open?url=${url}`
+        this.currentApp.openLocation(glUrl)
+    }
+}
+
+const possibleCommands = {
+    "list-tags": ListTagsCommand,
+    "set-tag": SetTagCommand,
+    "list-links": ListLinksCommand,
+    "reset-cache": ResetCacheCommand,
+    "open-in-goodlinks": OpenInGoodLinksCommand,
+}
+
+function run() {
+    // Small code duplication is better than excess complexity
+    let logLevel = ObjC.unwrap(
+        $.NSProcessInfo.processInfo.environment.objectForKey(LOG_LEVEL_VAR_NAME))
+    if (logLevel === undefined || logLevel === null) {
+        logLevel = "error"
+    } 
+
+    // Don't want to overcompliate this and pass down thru all dependencies.
+    // To make this easier logging is a simple global variable initialized here
+    // and accessible in whole script
+    log = new SimpleLogger(logLevel)
+
+    let rawArgs = $.NSProcessInfo.processInfo.arguments
+    if (rawArgs.count < 5) {
+        log.error(`invalid usage. This script should be called within alfred workflow only`)
+        return
+    }
+    let args = ObjC.deepUnwrap(rawArgs).slice(4)
+
+    if (args.count < 3) {
+        log.error("Invalid number of arguments passed")
+    }
+
+    let command = args.at(0)
+    let possibleCommandNames = Object.keys(possibleCommands).join(", ")
+    if (!(command in possibleCommands)) {
+        log.error(
+            `invalid command "${command}". Possible commands are: [${possibleCommandNames}]`)
+        return log.error("Invalid command specified")
+    }
+
+    let runner = new possibleCommands[command]()
+    return runner.run()
+}
