@@ -202,7 +202,6 @@ class FileCache {
 
     get() {
         if (!this.fm.exist(this.cacheFilePath)) {
-            // return this.updateCache()
             return false
         }
 
@@ -225,7 +224,6 @@ class FileCache {
 
     set(content) {
         if (this.isLocked()) {
-            // FIXME: throw exception?
             return false
         }
 
@@ -471,7 +469,6 @@ class ListLinksCommand extends WorkflowBase {
                 let summarySimilarity = stringSimilarity(link.summary, query)
 
                 if (titleSimilarity > FZF_SIMILARITY_WEIGHT || summarySimilarity > FZF_SIMILARITY_WEIGHT) {
-                // if ((titleSimilarity + summarySimilarity) > FZF_SIMILARITY_WEIGHT) {
                     log.debug(`query=${query}; link=${link.title}; titleSimilarity=${titleSimilarity}; summarySimilarity=${summarySimilarity}`)
                     linksWithWeight.push({
                         "weight": {
@@ -527,7 +524,6 @@ class ListLinksCommand extends WorkflowBase {
             // new one
             if (content.tag === defaultTag) {
                 log.debug(`content.tag (${content.tag}) === defaultTag (${defaultTag}), returning from cache`)
-                // return this.returnResult(this.formatLinksForAlfred(content.links))
                 return content.links
             } else {
                 log.debug(`tag in cache differs from current default tag (${content.tag} !== ${defaultTag}, cache is invalid`)
