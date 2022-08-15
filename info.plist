@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>bundleid</key>
-	<string>alfred-goodnotes-jumplist</string>
+	<string>alfred-quicklinks-workflow</string>
 	<key>category</key>
 	<string>Productivity</string>
 	<key>connections</key>
@@ -564,7 +564,7 @@ fi</string>
 	<key>variablesdontexport</key>
 	<array/>
 	<key>version</key>
-	<string>0.2</string>
+	<string>0.2.1</string>
 	<key>webaddress</key>
 	<string>https://github.com/bosha/alfred-quicklinks-workflow</string>
 </dict>
