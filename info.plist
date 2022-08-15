@@ -101,7 +101,7 @@
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>script</key>
-				<string>/usr/bin/osascript -l JavaScript ./script.jxa open-in-goodlinks "$1"</string>
+				<string>/usr/bin/osascript -l JavaScript ./src/script.jxa open-in-goodlinks "$1"</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
@@ -144,7 +144,7 @@
 				<key>runningsubtext</key>
 				<string>Loading links from GoodLinks (you may need to allow access to GoodLinks)</string>
 				<key>script</key>
-				<string>/usr/bin/osascript -l JavaScript ./script.jxa list-links "$1"</string>
+				<string>/usr/bin/osascript -l JavaScript ./src/script.jxa list-links "$1"</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
@@ -345,7 +345,7 @@ fi</string>
 				<key>runningsubtext</key>
 				<string></string>
 				<key>script</key>
-				<string>/usr/bin/osascript -l JavaScript ./script.jxa list-tags "$1"</string>
+				<string>/usr/bin/osascript -l JavaScript ./src/script.jxa list-tags "$1"</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
@@ -418,7 +418,7 @@ fi</string>
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>script</key>
-				<string>/usr/bin/osascript -l JavaScript ./script.jxa reset-cache "$1"</string>
+				<string>/usr/bin/osascript -l JavaScript ./src/script.jxa reset-cache "$1"</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
