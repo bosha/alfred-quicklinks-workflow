@@ -465,7 +465,6 @@ class ListLinksCommand extends WorkflowBase {
             let linksWithWeight = []
             links.forEach(link => {
                 let titleSimilarity = stringSimilarity(link.title, query)
-
                 let summarySimilarity = stringSimilarity(link.summary, query)
 
                 if (titleSimilarity > FZF_SIMILARITY_WEIGHT || summarySimilarity > FZF_SIMILARITY_WEIGHT) {
@@ -489,6 +488,12 @@ class ListLinksCommand extends WorkflowBase {
                 })
             })
 
+            if (links.length === 0) {
+                return this.returnErr(
+                   `No links found for query '${query}'`,
+                   "Try another query"
+                )
+            }
         }
 
         return this.returnResult(this.formatLinksForAlfred(links))
