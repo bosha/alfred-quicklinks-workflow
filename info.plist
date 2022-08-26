@@ -568,6 +568,10 @@ fi</string>
 						<string>Fuzzy</string>
 						<string>fuzzy</string>
 					</array>
+					<array>
+						<string>Sublime Like</string>
+						<string>sublime</string>
+					</array>
 				</array>
 			</dict>
 			<key>description</key>
@@ -615,7 +619,7 @@ fi</string>
 			<key>description</key>
 			<string>Set value between 0.1 and 1.</string>
 			<key>label</key>
-			<string>Weight for Fuzzy matcher</string>
+			<string>Weight for Fuzzy Matcher</string>
 			<key>type</key>
 			<string>textfield</string>
 			<key>variable</key>
