@@ -575,7 +575,7 @@ fi</string>
 				</array>
 			</dict>
 			<key>description</key>
-			<string>Fuzzy matcher to use while searching for a link. Simple just searches for a symbols, while Fuzzy guesses strings similarity with a simple algorhytm.</string>
+			<string>Fuzzy matcher to use while searching for a link. Simple just searches for a symbols, while Fuzzy guesses strings similarity with a simple algorhytm. Sublime like matchers as it says, tries to mimic the Sublime Text fuzzy matching.</string>
 			<key>label</key>
 			<string>Fuzzy Matcher</string>
 			<key>type</key>
