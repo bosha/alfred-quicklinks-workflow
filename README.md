@@ -21,3 +21,6 @@ To set default tag use `jl-settag` command within the Alfred.
 The following settings are also available thru Alfred workflow configuration:
  * **cache_ttl** - value in minutes. Set it to some big value such as 7 days (10080)  in order not to wait links loading too often (Goodlinks quite slow even with small amount of links)
  * **log_level** - predefined list of values: error, info, debug. By default set to "error". Set to "debug* so script will be more verbous. You don't need to change this settings unless you want to develop a new features for this workflow or fix a bug.
+ * **fuzzy_matcher** - allows to select fuzzy matching algorhytm for links search. Possible values are: simple - simply matches symbols; fuzzy - tries to guess strings similarity and sublime like - as it says, tries to mimic sublime strings matching.
+ * **simple_matcher_weight** - weight for simple matcher. The more weight - the more strings has to be similar in order to be shown in Alfred results. Value between 0.1 and 1. Default is 0.5.
+ * **fuzzy_matcher_weight** - weight for fuzzy matcher. The more weight - the more strings has to be similar in order to be shown in Alfred results. Value between 0.1 and 1. Default is 0.1.
