@@ -1,43 +1,101 @@
 ObjC.import("Foundation")
 
+// TODO: 
+// [ ] When doing initial load of links add support for rerun so after cache rebuild workflow will show links
+// [ ] Command for adding link to jumplist
+//     [ ] Option to automatically rebuild cache after adding
+//     [ ] Get link url and title from currently selected page
+
 let log = null
 
 const DEFAULT_TAG_VAR_NAME = "default_tag"
 const DEFAUlT_TTL_VAR_NAME = "cache_ttl"
-const FZF_SIMILARITY_WEIGHT = 0.1
 const LOG_LEVEL_VAR_NAME = "log_level"
+const FUZZY_SEARCH_TYPE_VAR_NAME = "fuzzy_matcher"
+const DEFAULT_FUZZY_MATCHER_WEIGHT = 0.1
+const DEFAULT_SIMPLE_MATCHER_WEIGHT = 0.5
+const DEFAULT_FUZZY_MATCHER = "simple"
+const SIMPLE_MATCHER_WEIGHT_VAR_NAME = "simple_matcher_weight"
+const FUZZY_MATCHER_WEIGHT_VAR_NAME = "fuzzy_matcher_weight"
 
-// Simple fuzzy finder implementation taken from here - 
-// https://stackoverflow.com/questions/23305000/javascript-fuzzy-search-that-makes-sense
-function stringSimilarity(str1, str2, gramSize=2) {
-  function getNGrams(s, len) {
-    s = ' '.repeat(len - 1) + s.toLowerCase() + ' '.repeat(len - 1);
-    let v = new Array(s.length - len + 1);
-    for (let i = 0; i < v.length; i++) {
-      v[i] = s.slice(i, i + len);
+class FuzzyStringsMatcher {
+    gramSize = null
+    defaultWeight = null
+
+    constructor(defaultWeight=DEFAULT_FUZZY_MATCHER_WEIGHT) {
+        this.gramSize = 2 // No need to change this now
+        this.defaultWeight = defaultWeight
     }
-    return v;
-  }
 
-  if (!str1?.length || !str2?.length) { return 0.0; }
+    match(str1, str2) {
+        // Simple fuzzy finder implementation taken from here - 
+        // https://stackoverflow.com/questions/23305000/javascript-fuzzy-search-that-makes-sense
+        function getNGrams(s, len) {
+            s = ' '.repeat(len - 1) + s.toLowerCase() + ' '.repeat(len - 1);
+            let v = new Array(s.length - len + 1);
+            for (let i = 0; i < v.length; i++) {
+                v[i] = s.slice(i, i + len);
+            }
+            return v;
+        }
 
-  //Order the strings by length so the order they're passed in doesn't matter 
-  //and so the smaller string's ngrams are always the ones in the set
-  let s1 = str1.length < str2.length ? str1 : str2;
-  let s2 = str1.length < str2.length ? str2 : str1;
+        if (!str1?.length || !str2?.length) { return false; }
 
-  let pairs1 = getNGrams(s1, gramSize);
-  let pairs2 = getNGrams(s2, gramSize);
-  let set = new Set(pairs1);
+        //Order the strings by length so the order they're passed in doesn't matter 
+        //and so the smaller string's ngrams are always the ones in the set
+        let s1 = str1.length < str2.length ? str1 : str2;
+        let s2 = str1.length < str2.length ? str2 : str1;
 
-  let total = pairs2.length;
-  let hits = 0;
-  for (let item of pairs2) {
-    if (set.delete(item)) {
-      hits++;
+        let pairs1 = getNGrams(s1, this.gramSize);
+        let pairs2 = getNGrams(s2, this.gramSize);
+        let set = new Set(pairs1);
+
+        let total = pairs2.length;
+        let hits = 0;
+        for (let item of pairs2) {
+            if (set.delete(item)) {
+                hits++;
+            }
+        }
+
+        // it's better to return similarity and decide on upper levels
+        // but for such simple script I think this is fine
+        let similarity = hits / total;
+        log.debug(`str1=${str1}; str2=${str2}; similarity=${similarity};`)
+        return similarity > this.defaultWeight ? true : false
     }
-  }
-  return hits / total;
+}
+
+class SimpleStringsMatcher {
+    defaultRatio = null
+
+    constructor(defaultRatio=DEFAULT_SIMPLE_MATCHER_WEIGHT) {
+        this.defaultRatio = defaultRatio
+    }
+
+    match(str1, str2) {
+        // Taken from here - https://stackoverflow.com/posts/39905590/revisions
+        var matches = 0;
+        if (str1.indexOf(str2) > -1) return true; // covers basic partial matches
+
+        for (var i = 0; i < str2.length; i++) {
+            str1.indexOf(str2[i]) > -1 ? matches += 1 : matches -=1;
+        }
+        return (matches/str1.length >= this.defaultRatio || str2 == "")
+    }
+}
+
+const FUZZY_MATCHERS_MAP = {
+    "simple": { // Simple algorhytm
+        "implCls": SimpleStringsMatcher,
+        "weightVarName": SIMPLE_MATCHER_WEIGHT_VAR_NAME,
+        "defaultWeight": DEFAULT_SIMPLE_MATCHER_WEIGHT,
+    },
+    "fuzzy": { // More complex fuzzy algorhytm; sometimes could be unpredicatble
+        "implCls": FuzzyStringsMatcher,
+        "weightVarName": FUZZY_MATCHER_WEIGHT_VAR_NAME,
+        "defaultWeight": DEFAULT_FUZZY_MATCHER_WEIGHT
+    }, 
 }
 
 class SimpleLogger { 
@@ -326,6 +384,29 @@ class WorkflowBase {
         return true
     }
 
+    getFuzzyMatcher() {
+        let userSelectedFuzzier = this.getEnvVar(FUZZY_SEARCH_TYPE_VAR_NAME)
+        if (userSelectedFuzzier === null) {
+            this.setEnvVar(FUZZY_SEARCH_TYPE_VAR_NAME, DEFAULT_FUZZY_MATCHER)
+            userSelectedFuzzier = DEFAULT_FUZZY_MATCHER
+        }
+
+        if (!(userSelectedFuzzier in FUZZY_MATCHERS_MAP)) {
+            log.error(`Invalid fuzzy matcher '${userSelectedFuzzier}'`)
+            throw new WorkflowError(`Invalid fuzzy matcher '${userSelectedFuzzier}'`)
+        }
+
+        let matcher = FUZZY_MATCHERS_MAP[userSelectedFuzzier]
+        let matcherWeight = this.getEnvVar(matcher.weightVarName)
+        if (matcherWeight === null) {
+            this.setEnvVar(matcher.weightVarName, matcher.defaultWeight)
+            matcherWeight = matcher.defaultWeight
+        }
+
+        let matcherInstance = new matcher.implCls(matcherWeight)
+        return matcherInstance
+    }
+
     returnErr(title, subtitle) {
         title = title || "Error executing workflow"
         subtitle = subtitle || "Check workflow debug window for details"
@@ -462,38 +543,26 @@ class ListLinksCommand extends WorkflowBase {
         if (query !== undefined && query !== "") {
             log.debug(`got argument for filtering=${query}`)
 
-            let linksWithWeight = []
+            let filteredLinks = []
+            let fuzzyMatcher = this.getFuzzyMatcher()
             links.forEach(link => {
-                let titleSimilarity = stringSimilarity(link.title, query)
-                let summarySimilarity = stringSimilarity(link.summary, query)
+                let titleSimilar = fuzzyMatcher.match(link.title.toLowerCase(), query)
+                let summarySimilar = fuzzyMatcher.match(link.summary.toLowerCase(), query)
+                log.debug(`titleSimilar=${titleSimilar}; summarySimilar=${summarySimilar}`)
 
-                if (titleSimilarity > FZF_SIMILARITY_WEIGHT || summarySimilarity > FZF_SIMILARITY_WEIGHT) {
-                    log.debug(`query=${query}; link=${link.title}; titleSimilarity=${titleSimilarity}; summarySimilarity=${summarySimilarity}`)
-                    linksWithWeight.push({
-                        "weight": {
-                            "title": titleSimilarity,
-                            "summary": summarySimilarity
-                        },
-                        "link": link
-                    })
+                if (titleSimilar || summarySimilar) {
+                    filteredLinks.push(link)
                 }
-
-                let sortedLinks = linksWithWeight.sort((a,b) => { 
-                    return (b.weight.title + b.weight.summary) - (a.weight.title + a.weight.summary)
-                })
-
-                links = []
-                sortedLinks.forEach((link) => {
-                    links.push(link.link)
-                })
             })
 
-            if (links.length === 0) {
+            if (filteredLinks.length === 0) {
                 return this.returnErr(
                    `No links found for query '${query}'`,
                    "Try another query"
                 )
             }
+
+            links = filteredLinks
         }
 
         return this.returnResult(this.formatLinksForAlfred(links))

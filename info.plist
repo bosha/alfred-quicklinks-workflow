@@ -555,14 +555,78 @@ fi</string>
 			<key>variable</key>
 			<string>log_level</string>
 		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>pairs</key>
+				<array>
+					<array>
+						<string>Simple</string>
+						<string>simple</string>
+					</array>
+					<array>
+						<string>Fuzzy</string>
+						<string>fuzzy</string>
+					</array>
+				</array>
+			</dict>
+			<key>description</key>
+			<string>Fuzzy matcher to use while searching for a link. Simple just searches for a symbols, while Fuzzy guesses strings similarity with a simple algorhytm.</string>
+			<key>label</key>
+			<string>Fuzzy Matcher</string>
+			<key>type</key>
+			<string>popupbutton</string>
+			<key>variable</key>
+			<string>fuzzy_matcher</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<string>0.5</string>
+				<key>placeholder</key>
+				<string>Value between 0.1 and 1</string>
+				<key>required</key>
+				<false/>
+				<key>trim</key>
+				<true/>
+			</dict>
+			<key>description</key>
+			<string>Set value between 0.1 and 1.</string>
+			<key>label</key>
+			<string>Weight for Simple Matcher</string>
+			<key>type</key>
+			<string>textfield</string>
+			<key>variable</key>
+			<string>simple_matcher_weight</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<string>0.1</string>
+				<key>placeholder</key>
+				<string>Value between 0.1 and 1</string>
+				<key>required</key>
+				<false/>
+				<key>trim</key>
+				<true/>
+			</dict>
+			<key>description</key>
+			<string>Set value between 0.1 and 1.</string>
+			<key>label</key>
+			<string>Weight for Fuzzy matcher</string>
+			<key>type</key>
+			<string>textfield</string>
+			<key>variable</key>
+			<string>fuzzy_matcher_weight</string>
+		</dict>
 	</array>
 	<key>variables</key>
 	<dict>
 		<key>default_tag</key>
 		<string>work/zain</string>
 	</dict>
-	<key>variablesdontexport</key>
-	<array/>
 	<key>version</key>
 	<string>0.2.1</string>
 	<key>webaddress</key>
