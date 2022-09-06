@@ -82,6 +82,19 @@
 				<false/>
 			</dict>
 		</array>
+		<key>EFF6731B-740E-4DFE-AE53-8683D3AE6693</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>D709FD3E-1D4B-4F8F-B6FF-10C0497A7B90</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
 	</dict>
 	<key>createdby</key>
 	<string>Alex Bo</string>
@@ -433,6 +446,50 @@ fi</string>
 			<key>version</key>
 			<integer>2</integer>
 		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>argumenttype</key>
+				<integer>2</integer>
+				<key>keyword</key>
+				<string>jl-savelink</string>
+				<key>subtext</key>
+				<string>Link will be saved with default tag</string>
+				<key>text</key>
+				<string>Save currently viewed link to quicklist</string>
+				<key>withspace</key>
+				<false/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.keyword</string>
+			<key>uid</key>
+			<string>EFF6731B-740E-4DFE-AE53-8683D3AE6693</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>/usr/bin/osascript -l JavaScript ./src/script.jxa save-link</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>5</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>D709FD3E-1D4B-4F8F-B6FF-10C0497A7B90</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
 	</array>
 	<key>readme</key>
 	<string>Workflow to quickly show links from Goodlinks. Oh yeah. it also supports simply fuzzy search.</string>
@@ -489,6 +546,13 @@ fi</string>
 			<key>ypos</key>
 			<real>210</real>
 		</dict>
+		<key>D709FD3E-1D4B-4F8F-B6FF-10C0497A7B90</key>
+		<dict>
+			<key>xpos</key>
+			<real>445</real>
+			<key>ypos</key>
+			<real>675</real>
+		</dict>
 		<key>E0117404-813A-434C-8B0F-52B91C567888</key>
 		<dict>
 			<key>xpos</key>
@@ -502,6 +566,13 @@ fi</string>
 			<real>440</real>
 			<key>ypos</key>
 			<real>110</real>
+		</dict>
+		<key>EFF6731B-740E-4DFE-AE53-8683D3AE6693</key>
+		<dict>
+			<key>xpos</key>
+			<real>225</real>
+			<key>ypos</key>
+			<real>675</real>
 		</dict>
 	</dict>
 	<key>userconfigurationconfig</key>
@@ -624,6 +695,44 @@ fi</string>
 			<string>textfield</string>
 			<key>variable</key>
 			<string>fuzzy_matcher_weight</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<true/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string>Reset Cache after adding new link</string>
+			</dict>
+			<key>description</key>
+			<string>If checked, cache will be cleared after new link is added. If cache isn't used then this flag is ignored.</string>
+			<key>label</key>
+			<string>Reset Cache after adding new link</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>reset_cache_after_add</string>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>default</key>
+				<true/>
+				<key>required</key>
+				<false/>
+				<key>text</key>
+				<string>Rebuild after add</string>
+			</dict>
+			<key>description</key>
+			<string>Triggers rebuilding of a cache after it was reset after addition of new link.</string>
+			<key>label</key>
+			<string>Rebuild cache after add</string>
+			<key>type</key>
+			<string>checkbox</string>
+			<key>variable</key>
+			<string>rebuild_cache_after_add</string>
 		</dict>
 	</array>
 	<key>variables</key>

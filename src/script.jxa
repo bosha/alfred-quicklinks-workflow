@@ -11,12 +11,17 @@ let log = null
 const DEFAULT_TAG_VAR_NAME = "default_tag"
 const DEFAUlT_TTL_VAR_NAME = "cache_ttl"
 const LOG_LEVEL_VAR_NAME = "log_level"
+const RESET_AFTER_ADD_VAR_NAME = "reset_cache_after_add"
+const REBUILD_CACHE_AFTER_RESET_VAR_NAME = "rebuild_cache_after_add"
 const FUZZY_SEARCH_TYPE_VAR_NAME = "fuzzy_matcher"
 const DEFAULT_FUZZY_MATCHER_WEIGHT = 0.1
 const DEFAULT_SIMPLE_MATCHER_WEIGHT = 0.5
 const DEFAULT_FUZZY_MATCHER = "simple"
 const SIMPLE_MATCHER_WEIGHT_VAR_NAME = "simple_matcher_weight"
 const FUZZY_MATCHER_WEIGHT_VAR_NAME = "fuzzy_matcher_weight"
+const BROWSER_CHROMIUM_VARIANTS = ["Google Chrome", "Chromium", "Opera", "Vivaldi", "Brave Browser", "Microsoft Edge"]
+const BROWSER_WEBKIT_VARIANTS = ["Safari", "Webkit"]
+
 
 class FuzzyStringsMatcher {
     gramSize = null
@@ -602,6 +607,20 @@ class ListLinksCommand extends WorkflowBase {
         return this.returnResult(this.formatLinksForAlfred(links))
     }
 
+    getCacher() {
+        let cache = null
+        let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
+        if (cacheTtl === null || cacheTtl === "0" || cacheTtl === "") {
+            log.debug("user opted to not use cache")
+            cache = new NoCache()
+        } else {
+            log.debug(`using FileCache with ttl=${cacheTtl}`)
+            cache = new FileCache(this.currentApp, cacheTtl)
+        }
+
+        return cache
+    }
+
     getLinks() {
         log.debug("Requested to load links..")
 
@@ -613,16 +632,7 @@ class ListLinksCommand extends WorkflowBase {
             )
         }
 
-        let cache = null
-        let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
-        if (cacheTtl === null || cacheTtl === "0" || cacheTtl === "") {
-            log.debug("user opted to not use cache")
-            cache = new NoCache()
-        } else {
-            log.debug(`using FileCache with ttl=${cacheTtl}`)
-            cache = new FileCache(this.currentApp, cacheTtl)
-        }
-
+        let cache = this.getCacher()
         let content = cache.get()
         // if cache is up to date then we simply return cached data
         if (content) {
@@ -662,11 +672,12 @@ class ResetCacheCommand extends WorkflowBase {
         let cache = null
         let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
         if (cacheTtl !== null && cacheTtl !== "0" && cacheTtl !== "") {
-            log.debug("Cache is in use, resetting it")
+            log.debug("Cache is set up, resetting it")
             cache = new FileCache(this.currentApp, cacheTtl)
             try {
                 cache.reset()
             } catch(e) {
+                log.error(e)
                 return this.returnErr("Could not reset cache", e.message)
             }
         }
@@ -692,12 +703,81 @@ class OpenInGoodLinksCommand extends WorkflowBase {
     }
 }
 
+// Command gets frontmost browser, tab and saves it with specified tag
+class SaveLinkCommand extends WorkflowBase {
+    run() {
+        let defaultTag = this.getEnvVar(DEFAULT_TAG_VAR_NAME)
+        if (defaultTag === null) { 
+            log.error("Default tag is not set or not found in env variable")
+            return this.returnErr(
+                "Default tag is not set",
+                "You can set default tag with jl-settag"
+            )
+        }
+
+        const frontmostAppName = Application("System Events").applicationProcesses.where({ frontmost: true }).name()[0]
+        const frontmostApp = Application(frontmostAppName)
+
+        let tabTitle = null
+        let tabUrl = null
+        if (BROWSER_CHROMIUM_VARIANTS.some(app_name => frontmostAppName.startsWith(app_name))) {
+            tabTitle = frontmostApp.windows[0].activeTab.name()
+            tabUrl = frontmostApp.windows[0].activeTab.url()
+        } else if (BROWSER_WEBKIT_VARIANTS.some(app_name => frontmostAppName.startsWith(app_name))) {
+            tabTitle = frontmostApp.windows[0].currentTab.name()
+            tabUrl = frontmostApp.windows[0].currentTab.url()
+        } else {
+            log.error("could not detect browser")
+            return this.returnErr(
+                "Could not detect browser",
+                `Supported browsers are: ${BROWSER_CHROMIUM_VARIANTS.join(",")}, ${BROWSER_WEBKIT_VARIANTS.join(",")}`
+            )
+        }
+        log.debug(`Browser is ${frontmostAppName}`)
+
+        log.debug(`adding link with title=${tabTitle}; url=${tabUrl}`)
+        this.goodlinksApp.addNewLink(tabUrl, tabTitle, null, defaultTag, false, true)
+
+        if (this.getEnvVar(RESET_AFTER_ADD_VAR_NAME)) {
+            let cache = null
+            let cacheTtl = this.getEnvVar(DEFAUlT_TTL_VAR_NAME)
+            if (cacheTtl !== null && cacheTtl !== "0" && cacheTtl !== "") {
+                log.debug("Cache is set up, resetting it")
+                cache = new FileCache(this.currentApp, cacheTtl)
+                try {
+                    cache.reset()
+                } catch(e) {
+                    log.error(e)
+                    return this.returnErr("Could not reset cache", e.message)
+                }
+
+                if (this.getEnvVar(REBUILD_CACHE_AFTER_RESET_VAR_NAME)) {
+                    // Goodlinks have its own cache and newly added link will no present in output
+                    // immediately after add. That's why we have to wait couple of seconds before
+                    // starting to build cache. 
+                    // and yes, apple does not load into JXA context native sleep function, that's
+                    // why I have to rely on good old shell scripting here :) 
+                    this.currentApp.doShellScript("sleep 5")
+
+                    log.debug("Starting to build cache")
+                    let listCommand = new ListLinksCommand()
+                    let cache = listCommand.getCacher()
+                    // Ignoring output since in this case we're interested only
+                    // in building cache
+                    cache.get()
+                }
+            }
+        }
+    }
+}
+
 const possibleCommands = {
     "list-tags": ListTagsCommand,
     "set-tag": SetTagCommand,
     "list-links": ListLinksCommand,
     "reset-cache": ResetCacheCommand,
     "open-in-goodlinks": OpenInGoodLinksCommand,
+    "save-link": SaveLinkCommand,
 }
 
 function run() {
